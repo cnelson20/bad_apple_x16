@@ -14,8 +14,6 @@ VERA_DATA = $9F23
 IMAGE_WIDTH = 40
 IMAGE_HEIGHT = 30
 
-LOAD_AREA = $3000
-
 .SEGMENT "INIT"
 .SEGMENT "STARTUP"
 .SEGMENT "ONCE"
@@ -41,10 +39,10 @@ setup:
 	;sta $9F2A 
 	;sta $9F2B
 	
-	ldx #<data_start
-	stx $20 
-	ldy #>data_start
-	stx $21
+	lda #<data_start
+	sta $20 
+	lda #>data_start
+	sta $21
 	
 	lda #$00
 	sta VERA_LOADDR
@@ -81,30 +79,6 @@ loop:
 	rts
 
 frame:	
-	jmp display_image
-	
-	lda #$00
-	sta VERA_LOADDR
-	sta VERA_HIADDR 
-	lda #$10
-	sta VERA_AUTOINC
-	ldy #IMAGE_HEIGHT
-@fill_outer_loop:	
-	ldx #0
-	stx VERA_LOADDR 
-	ldx #IMAGE_WIDTH
-@fill_inner_loop:
-	lda #$20
-	sta VERA_DATA 
-	lda #1
-	sta VERA_DATA
-	dex 
-	bne @fill_inner_loop
-	inc VERA_HIADDR 
-	dey 
-	bne @fill_outer_loop
-	
-display_image:
 	lda #$20
 	sta VERA_AUTOINC
 	sta current_color
@@ -152,8 +126,6 @@ inc_index:
 	inc $20
 	bne :+
 	inc $21
-	bpl :+
-	jsr reset_irq_handler
 	:
 	rts 
 
@@ -162,45 +134,17 @@ load_file:
 	ldx #<filename
 	ldy #>filename
 	jsr SETNAM 
-	
+
 	lda #0
 	ldx #8 
 	ldy #$FF 
 	jsr SETLFS
-	
+
 	lda #0
 	ldx #<LOAD_AREA
 	ldy #>LOAD_AREA
 	jsr LOAD
 	rts 
-	
-inc_filename:	
-	ldx filename_numbers+3
-	inx 
-	stx filename_numbers+3
-	cpx #$30 + 10
-	bcc @end 
-	
-	ldy #$30
-	sty filename_numbers+3
-	ldx filename_numbers+2
-	inx 
-	stx filename_numbers+2
-	cpx #$30 + 10
-	bcc @end 
-	
-	sty filename_numbers+2
-	ldx filename_numbers+1
-	inx 
-	stx filename_numbers+1
-	cpx #$30 + 10
-	bcc @end 
-	
-	sty filename_numbers+1
-	inc filename_numbers
-@end:
-	rts 
-	
 
 preserve_default_irq:
     lda $0314
@@ -242,12 +186,13 @@ custom_irq_handler:
 	
 	@dec9F27:
 	lda $9F27 
-	and #%11111110
+	ora #1
 	sta $9F27
 
     @irq_done:
     jmp (Default_irq_handler)
 
-data_start = data + 2
+LOAD_AREA:
 data:
 	.incbin "modified.bin"
+data_start = data + 2
