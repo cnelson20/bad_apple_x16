@@ -174,6 +174,34 @@ load_file:
 	jsr LOAD
 	rts 
 	
+inc_filename:	
+	ldx filename_numbers+3
+	inx 
+	stx filename_numbers+3
+	cpx #$30 + 10
+	bcc @end 
+	
+	ldy #$30
+	sty filename_numbers+3
+	ldx filename_numbers+2
+	inx 
+	stx filename_numbers+2
+	cpx #$30 + 10
+	bcc @end 
+	
+	sty filename_numbers+2
+	ldx filename_numbers+1
+	inx 
+	stx filename_numbers+1
+	cpx #$30 + 10
+	bcc @end 
+	
+	sty filename_numbers+1
+	inc filename_numbers
+@end:
+	rts 
+	
+
 preserve_default_irq:
     lda $0314
     sta Default_irq_handler
