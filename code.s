@@ -1,5 +1,11 @@
 .SETCPU "65c02"
 
+; Kernal Routines and VERA registers ;
+
+SETLFS = $FFBA 
+SETNAM = $FFBD 
+LOAD = $FFD5
+
 VERA_LOADDR = $9F20
 VERA_HIADDR = $9F21
 VERA_AUTOINC = $9F22 
@@ -18,7 +24,7 @@ LOAD_AREA = $3000
 filename:
 	.literal "OUTPUT/"
 filename_numbers:
-	.literal "0001.BIN"
+	.literal "0173.BIN"
 filename_end:
 
 Default_irq_handler:
@@ -149,7 +155,24 @@ inc_index:
 	bpl :+
 	jsr reset_irq_handler
 	:
-	rts 	
+	rts 
+
+load_file:
+	lda filename_end - filename
+	ldx #<filename
+	ldy #>filename
+	jsr SETNAM 
+	
+	lda #0
+	ldx #8 
+	ldy #$FF 
+	jsr SETLFS
+	
+	lda #0
+	ldx #<LOAD_AREA
+	ldy #>LOAD_AREA
+	jsr LOAD
+	rts 
 	
 preserve_default_irq:
     lda $0314
@@ -188,7 +211,7 @@ custom_irq_handler:
 	bne @dec9F27
 		
 	jsr frame
-		
+	
 	@dec9F27:
 	lda $9F27 
 	and #%11111110
