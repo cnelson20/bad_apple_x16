@@ -22,7 +22,7 @@ IMAGE_HEIGHT = 30
 filename:
 	.literal "OUTPUT/"
 filename_numbers:
-	.literal "0173.BIN"
+	.literal "0001.BIN"
 filename_end:
 
 Default_irq_handler:
