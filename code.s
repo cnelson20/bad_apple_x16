@@ -146,24 +146,6 @@ load_file:
 	jsr LOAD
 	
 	rts 
-	
-toHexChars:
-	pha 
-	lsr 
-	lsr 
-	lsr 
-	lsr
-	tax
-	ldy @array, X
-	pla 
-	and #$0F 
-	tax 
-	lda @array, X 
-	tax 
-	
-	rts 
-@array:
-	.byte $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $01, $02, $03, $04, $05, $06
 
 inc_numberstring:
 	ldx filename_numbers+3
@@ -268,8 +250,5 @@ custom_irq_handler:
     @irq_done:
     jmp (Default_irq_handler)
 
-data:
-	.byte $99, $99, 0, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, $FF  
-	.incbin "modified.bin"
 data_start = $6B66
-LOAD_AREA = $6B66 
+LOAD_AREA = data_start
