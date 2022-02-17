@@ -130,20 +130,89 @@ inc_index:
 	rts 
 
 load_file:
-	lda filename_end - filename
+	lda #filename_end - filename
 	ldx #<filename
 	ldy #>filename
 	jsr SETNAM 
 
 	lda #0
 	ldx #8 
-	ldy #$FF 
+	ldy #1
 	jsr SETLFS
 
 	lda #0
 	ldx #<LOAD_AREA
 	ldy #>LOAD_AREA
 	jsr LOAD
+	
+	rts 
+	
+toHexChars:
+	pha 
+	lsr 
+	lsr 
+	lsr 
+	lsr
+	tax
+	ldy @array, X
+	pla 
+	and #$0F 
+	tax 
+	lda @array, X 
+	tax 
+	
+	rts 
+@array:
+	.byte $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $01, $02, $03, $04, $05, $06
+
+inc_numberstring:
+	ldx filename_numbers+3
+	inx 
+	stx filename_numbers+3
+	cpx #$30 + 10 
+	bcc :+
+	
+	ldy #$30
+	sty filename_numbers+3
+	ldx filename_numbers+2
+	inx 
+	stx filename_numbers+2
+	cpx #$30 + 10 
+	bcc :+
+
+	sty filename_numbers+2
+	ldx filename_numbers+1
+	inx 
+	stx filename_numbers+1
+	cpx #$30 + 10 
+	bcc :+
+
+	sty filename_numbers+1
+	inc filename_numbers
+
+	ldx filename_numbers
+	cpx #$30 + 7
+	bcc :+ 
+	jsr reset_irq_handler
+	
+	:
+	rts 
+
+display_filename_numbers:
+	lda #2
+	sta $9F20 
+	lda #32
+	sta $9F21
+	lda #$20
+	sta $9F22 
+	lda filename_numbers
+	sta $9F23 
+	lda filename_numbers+1
+	sta $9F23 
+	lda filename_numbers+2
+	sta $9F23 
+	lda filename_numbers+3
+	sta $9F23 
 	rts 
 
 preserve_default_irq:
@@ -181,8 +250,15 @@ custom_irq_handler:
 	sta frame_counter
     and #%00000001
 	bne @dec9F27
-		
+	
+	jsr display_filename_numbers
+	jsr load_file
+	lda #<data_start 
+	sta $20
+	lda #>data_start 
+	sta $21
 	jsr frame
+	jsr inc_numberstring
 	
 	@dec9F27:
 	lda $9F27 
@@ -192,7 +268,8 @@ custom_irq_handler:
     @irq_done:
     jmp (Default_irq_handler)
 
-LOAD_AREA:
 data:
+	.byte $99, $99, 0, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, 1, 40, $FF  
 	.incbin "modified.bin"
-data_start = data + 2
+data_start = $6B66
+LOAD_AREA = $6B66 
