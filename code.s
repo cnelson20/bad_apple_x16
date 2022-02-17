@@ -11,8 +11,8 @@ VERA_HIADDR = $9F21
 VERA_AUTOINC = $9F22 
 VERA_DATA = $9F23
 
-IMAGE_WIDTH = 40
-IMAGE_HEIGHT = 30
+IMAGE_WIDTH = 80
+IMAGE_HEIGHT = 60
 
 .SEGMENT "INIT"
 .SEGMENT "STARTUP"
@@ -20,7 +20,7 @@ IMAGE_HEIGHT = 30
 	jmp setup
 
 filename:
-	.literal "OUTPUT/"
+	.literal "OUT2PT/"
 filename_numbers:
 	.literal "0001.BIN"
 filename_end:
@@ -180,22 +180,22 @@ inc_numberstring:
 	:
 	rts 
 
-display_filename_numbers:
-	lda #2
-	sta $9F20 
-	lda #32
-	sta $9F21
-	lda #$20
-	sta $9F22 
-	lda filename_numbers
-	sta $9F23 
-	lda filename_numbers+1
-	sta $9F23 
-	lda filename_numbers+2
-	sta $9F23 
-	lda filename_numbers+3
-	sta $9F23 
-	rts 
+;display_filename_numbers:
+;	lda #2
+;	sta $9F20 
+;	lda #32
+;	sta $9F21
+;	lda #$20
+;	sta $9F22 
+;	lda filename_numbers
+;	sta $9F23 
+;	lda filename_numbers+1
+;	sta $9F23 
+;	lda filename_numbers+2
+;	sta $9F23 
+;	lda filename_numbers+3
+;	sta $9F23 
+;	rts 
 
 preserve_default_irq:
     lda $0314
@@ -230,24 +230,29 @@ custom_irq_handler:
 	lda frame_counter
 	inc A
 	sta frame_counter
+	tax 
     and #%00000001
 	bne @dec9F27
-	
-	jsr display_filename_numbers
+
+; for when I combine multiple frames into one file 	
+;	txa 
+;	and #%00011111
+;	bne @draw_frame
 	jsr load_file
 	lda #<data_start 
 	sta $20
 	lda #>data_start 
 	sta $21
-	jsr frame
 	jsr inc_numberstring
+@draw_frame:	
+	jsr frame
 	
-	@dec9F27:
+@dec9F27:
 	lda $9F27 
 	ora #1
 	sta $9F27
 
-    @irq_done:
+@irq_done:
     jmp (Default_irq_handler)
 
 data_start = $6B66
