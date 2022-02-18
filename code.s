@@ -32,7 +32,13 @@ frame_counter:
 current_color:
 	.byte 0
 
+vram_mapstart:
+	.byte 0
+
 setup:
+	lda #$40
+	sta vram_mapstart
+	
 	lda #0
 	sta $9F25
 	lda #64
@@ -46,10 +52,11 @@ setup:
 	
 	lda #$00
 	sta VERA_LOADDR
+	lda #0
 	sta VERA_HIADDR 
 	lda #$10
 	sta VERA_AUTOINC
-	ldy #IMAGE_HEIGHT
+	ldy #$40 + IMAGE_HEIGHT
 @fill_outer_loop:	
 	ldx #0
 	stx VERA_LOADDR 
@@ -84,6 +91,7 @@ frame:
 	sta current_color
 	ldy #0
 	sty VERA_LOADDR
+	ldy vram_mapstart
 	sty VERA_HIADDR
 outer_loop:	
 	ldy #0
@@ -106,9 +114,11 @@ inner_loop:
 	sta VERA_LOADDR
 	lda VERA_HIADDR
 	inc A 
+	sta VERA_HIADDR
+	sec 
+	sbc vram_mapstart
 	cmp #IMAGE_HEIGHT
 	bcs end 
-	sta VERA_HIADDR
 	
 	jmp inner_loop
 done:
@@ -234,18 +244,28 @@ custom_irq_handler:
     and #%00000001
 	bne @dec9F27
 
-; for when I combine multiple frames into one file 	
-;	txa 
-;	and #%00011111
-;	bne @draw_frame
 	jsr load_file
 	lda #<data_start 
 	sta $20
 	lda #>data_start 
 	sta $21
 	jsr inc_numberstring
+	
 @draw_frame:	
 	jsr frame
+	
+	lda vram_mapstart
+	lsr 
+	sta $9F2E
+	lda vram_mapstart
+	beq :+
+	lda #0
+	sta vram_mapstart
+	jmp :++
+	:
+	lda #$40
+	sta vram_mapstart
+	:
 	
 @dec9F27:
 	lda $9F27 
