@@ -275,5 +275,5 @@ custom_irq_handler:
 @irq_done:
     jmp (Default_irq_handler)
 
-data_start = $6B66
+data_start = $1000
 LOAD_AREA = data_start
