@@ -10,6 +10,9 @@ VERA_LOADDR = $9F20
 VERA_HIADDR = $9F21
 VERA_AUTOINC = $9F22 
 VERA_DATA = $9F23
+VERA_AUDIO_CTRL = $9F3B
+VERA_AUDIO_RATE = $9F3C
+VERA_AUDIO_DATA = $9F3D
 
 IMAGE_WIDTH = 80
 IMAGE_HEIGHT = 60
@@ -24,6 +27,11 @@ filename:
 filename_numbers:
 	.literal "0001.BIN"
 filename_end:
+audio_filename:
+	.literal "SOUND/"
+audio_filename_numbers:
+	.literal "0001.RAW"
+audio_filename_end:
 
 Default_irq_handler:
 	.word 0
@@ -35,20 +43,66 @@ current_color:
 vram_mapstart:
 	.byte 0
 
+.macro inc_string numbers
+	ldx numbers+3
+	inx 
+	stx numbers+3
+	cpx #$30 + 10 
+	bcc :+
+	
+	ldy #$30
+	sty numbers+3
+	ldx numbers+2
+	inx 
+	stx numbers+2
+	cpx #$30 + 10 
+	bcc :+
+
+	sty numbers+2
+	ldx numbers+1
+	inx 
+	stx numbers+1
+	cpx #$30 + 10 
+	bcc :+
+
+	sty numbers+1
+	inc numbers
+
+	ldx numbers
+	cpx #$30 + 7
+	bcc :+ 
+	jsr reset_irq_handler
+	
+	:
+	rts
+.endmacro
+
 setup:
 	lda #$40
 	sta vram_mapstart
 	
 	lda #0
 	sta $9F25
-	lda #64
-	;sta $9F2A 
-	;sta $9F2B
+	lda #128
+	sta $9F2A 
+	sta $9F2B
 	
-	lda #<data_start
+	lda #<video_data_start
 	sta $20 
-	lda #>data_start
+	lda #>video_data_start
 	sta $21
+	
+	lda #0
+	sta VERA_AUDIO_RATE
+	lda #128
+	sta VERA_AUDIO_CTRL
+	
+	jsr load_new_audio
+	jsr update_audio
+	lda #$0F ; max volume ; 8 bit mono ;
+	sta VERA_AUDIO_CTRL
+	lda #32
+	sta VERA_AUDIO_RATE
 	
 	lda #$00
 	sta VERA_LOADDR
@@ -76,6 +130,9 @@ setup:
 	jsr set_custom_irq_handler
 
 loop:
+	jsr $FFE4 
+	cmp #$20 
+	beq :+
 	lda #<custom_irq_handler
 	cmp $0314
 	bne :+ 
@@ -83,6 +140,7 @@ loop:
 	cmp $0315
 	beq loop
 	:	
+	jsr reset_irq_handler
 	rts
 
 frame:	
@@ -151,43 +209,55 @@ load_file:
 	jsr SETLFS
 
 	lda #0
-	ldx #<LOAD_AREA
-	ldy #>LOAD_AREA
+	ldx #<video_data_start
+	ldy #>video_data_start
 	jsr LOAD
 	
 	rts 
 
-inc_numberstring:
-	ldx filename_numbers+3
-	inx 
-	stx filename_numbers+3
-	cpx #$30 + 10 
-	bcc :+
+load_new_audio:
+	lda #audio_filename_end - audio_filename
+	ldx #<audio_filename
+	ldy #>audio_filename
+	jsr SETNAM 
+
+	lda #0
+	ldx #8 
+	ldy #1
+	jsr SETLFS
+
+	lda #0
+	ldx #<audio_data_start
+	stx $30
+	ldy #>audio_data_start
+	sty $31
+	jsr LOAD
+
+	inc_string audio_filename_numbers
 	
-	ldy #$30
-	sty filename_numbers+3
-	ldx filename_numbers+2
-	inx 
-	stx filename_numbers+2
-	cpx #$30 + 10 
-	bcc :+
-
-	sty filename_numbers+2
-	ldx filename_numbers+1
-	inx 
-	stx filename_numbers+1
-	cpx #$30 + 10 
-	bcc :+
-
-	sty filename_numbers+1
-	inc filename_numbers
-
-	ldx filename_numbers
-	cpx #$30 + 7
-	bcc :+ 
-	jsr reset_irq_handler
+	rts 
 	
-	:
+update_audio:
+	ldy #0
+@write:
+	lda VERA_AUDIO_CTRL
+	and #128
+	bne :+
+	lda ($30), Y
+	sta VERA_AUDIO_DATA
+	
+	inc $30
+	bne @write
+	lda $31
+	inc A 
+	sta $31	
+	cmp #$30
+	bcc @write
+	
+	jsr load_new_audio
+	
+	jmp @write
+@end_write:
 	rts 
 
 ;display_filename_numbers:
@@ -206,6 +276,10 @@ inc_numberstring:
 ;	lda filename_numbers+3
 ;	sta $9F23 
 ;	rts 
+
+inc_framenumberstring:
+	inc_string filename_numbers
+	rts 
 
 preserve_default_irq:
     lda $0314
@@ -235,7 +309,7 @@ reset_irq_handler:
 custom_irq_handler:
     lda $9F27
     and #$01
-    beq @irq_done
+    beq @end_frame
     ; vsync ;
 	lda frame_counter
 	inc A
@@ -245,11 +319,11 @@ custom_irq_handler:
 	bne @dec9F27
 
 	jsr load_file
-	lda #<data_start 
+	lda #<video_data_start 
 	sta $20
-	lda #>data_start 
+	lda #>video_data_start 
 	sta $21
-	jsr inc_numberstring
+	jsr inc_framenumberstring
 	
 @draw_frame:	
 	jsr frame
@@ -266,14 +340,23 @@ custom_irq_handler:
 	lda #$40
 	sta vram_mapstart
 	:
-	
 @dec9F27:
 	lda $9F27 
 	ora #1
 	sta $9F27
+@end_frame:
 
-@irq_done:
+	lda $9F26 
+	ora $9F27 
+	and #%00001000
+	beq @fifo_done
+	
+	; fill fifo 
+	jsr update_audio
+	
+@fifo_done:
     jmp (Default_irq_handler)
 
-data_start = $1000
-LOAD_AREA = data_start
+video_data_start = $1000
+audio_data_start = $2000
+AUDIO_END = audio_data_start + $1000
