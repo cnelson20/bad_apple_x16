@@ -1,7 +1,11 @@
 <?php 
 
-$part_length = 0x3000 - 0x2000;
-$contents = file_get_contents("Bad_Apple_12207Hz_Mono.raw");
+$part_length = 0x4000 - 0x2000;
+if ($argc == 1) {
+	echo "filename needed\n";
+	exit(1);
+}
+$contents = file_get_contents($argv[1]);
 $array = array();
 for ($i = 0; $i < strlen($contents); $i += $part_length) {
 	$array[] = chr(0x00) . chr(0x20) . substr($contents, $i, min(strlen($contents) - $i, $part_length));

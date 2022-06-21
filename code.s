@@ -43,6 +43,13 @@ current_color:
 vram_mapstart:
 	.byte 0
 
+.macro inc_index
+	inc $20
+	bne :+
+	inc $21
+	:
+.endmacro
+
 .macro inc_string numbers
 	ldx numbers+3
 	inx 
@@ -81,19 +88,32 @@ setup:
 	lda #$40
 	sta vram_mapstart
 	
-	lda #0
-	sta $9F25
+	stz $9F25
+	
 	lda #128
 	sta $9F2A 
 	sta $9F2B
 	
-	lda #<video_data_start
-	sta $20 
-	lda #>video_data_start
-	sta $21
+	lda $9F36
+	sta $9F2F
+	lda $9F34
+	sta $9F2D
 	
-	lda #0
-	sta VERA_AUDIO_RATE
+	stz $9F30
+	stz $9F31
+	stz $9F32
+	stz $9F33
+	
+	stz vram_mapstart
+	stz $9F2E
+	
+	; enable layer 0, disable layer 1
+	lda $9F29
+	ora #%00010000
+	and #%11011111
+	sta $9F29
+	
+	stz VERA_AUDIO_RATE
 	lda #128
 	sta VERA_AUDIO_CTRL
 	
@@ -101,8 +121,6 @@ setup:
 	jsr update_audio
 	lda #$0F ; max volume ; 8 bit mono ;
 	sta VERA_AUDIO_CTRL
-	lda #32
-	sta VERA_AUDIO_RATE
 	
 	lda #$00
 	sta VERA_LOADDR
@@ -111,65 +129,62 @@ setup:
 	lda #$10
 	sta VERA_AUTOINC
 	ldy #$40 + IMAGE_HEIGHT
-@fill_outer_loop:	
+	
+	:
 	ldx #0
 	stx VERA_LOADDR 
 	ldx #IMAGE_WIDTH
-@fill_inner_loop:
+	:
 	lda #$20
 	sta VERA_DATA 
 	lda #$01
 	sta VERA_DATA
 	dex 
-	bne @fill_inner_loop
+	bne :-
 	inc VERA_HIADDR 
 	dey 
-	bne @fill_outer_loop
+	bne :--
 
 	jsr preserve_default_irq
 	jsr set_custom_irq_handler
+	
+	lda #32 ; 6103.5 Hz 
+	sta VERA_AUDIO_RATE ; start playback of audio
 
 loop:
-	jsr $FFE4 
-	cmp #$20 
-	beq :+
-	lda #<custom_irq_handler
-	cmp $0314
-	bne :+ 
-    lda #>custom_irq_handler
-	cmp $0315
-	beq loop
-	:	
-	jsr reset_irq_handler
+	:
+	
+	bra :-
 	rts
 
 frame:	
 	lda #$20
 	sta VERA_AUTOINC
 	sta current_color
-	ldy #0
-	sty VERA_LOADDR
+
+	stz VERA_LOADDR
 	ldy vram_mapstart
 	sty VERA_HIADDR
 outer_loop:	
-	ldy #0
-	lda ( $20 ), Y
+	lda ( $20 )
 	beq done
 	cmp #$FF 
 	beq end 
-	tax 
+	tax
+	
+	inx
 inner_loop:
-	cpx #0 
+	dex
 	beq done 
-	dex 
+	
 	
 	lda current_color
 	sta VERA_DATA 
 	lda VERA_LOADDR 
 	cmp #IMAGE_WIDTH * 2
 	bcc inner_loop
-	lda #0
-	sta VERA_LOADDR
+	
+	stz VERA_LOADDR
 	lda VERA_HIADDR
 	inc A 
 	sta VERA_HIADDR
@@ -184,18 +199,12 @@ done:
 	eor #$80
 	sta current_color
 
-	jsr inc_index
+	inc_index
 	jmp outer_loop
 end:
-	jsr inc_index
+	inc_index
+	
 	rts
-
-inc_index:
-	inc $20
-	bne :+
-	inc $21
-	:
-	rts 
 
 load_file:
 	lda #filename_end - filename
@@ -235,9 +244,25 @@ load_new_audio:
 
 	inc_string audio_filename_numbers
 	
+	lda filename_numbers+1
+	cmp #1
+	bcc :+
+	lda filename_numbers+2
+	cmp #6
+	bcc :+
+	lda filename_numbers+3
+	cmp #4
+	bcc :+
+	
+	lda #0
+	sta VERA_AUDIO_RATE
+	
+	:	
 	rts 
 	
 update_audio:
+	;rts ; testing 
+
 	ldy #0
 @write:
 	lda VERA_AUDIO_CTRL
@@ -251,31 +276,14 @@ update_audio:
 	lda $31
 	inc A 
 	sta $31	
-	cmp #$30
+	cmp #>audio_data_start + $20
 	bcc @write
 	
 	jsr load_new_audio
-	
-	jmp @write
+	lda VERA_AUDIO_RATE
+	bne @write ; if not out, keep copying
 @end_write:
 	rts 
-
-;display_filename_numbers:
-;	lda #2
-;	sta $9F20 
-;	lda #32
-;	sta $9F21
-;	lda #$20
-;	sta $9F22 
-;	lda filename_numbers
-;	sta $9F23 
-;	lda filename_numbers+1
-;	sta $9F23 
-;	lda filename_numbers+2
-;	sta $9F23 
-;	lda filename_numbers+3
-;	sta $9F23 
-;	rts 
 
 inc_framenumberstring:
 	inc_string filename_numbers
@@ -308,6 +316,7 @@ reset_irq_handler:
 
 custom_irq_handler:
     lda $9F27
+	ora $9F26 ; vsync comes from both
     and #$01
     beq @end_frame
     ; vsync ;
@@ -317,6 +326,7 @@ custom_irq_handler:
 	tax 
     and #%00000001
 	bne @dec9F27
+	; only draw every other frame ;
 
 	jsr load_file
 	lda #<video_data_start 
