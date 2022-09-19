@@ -148,7 +148,7 @@ setup:
 	jsr preserve_default_irq
 	jsr set_custom_irq_handler
 	
-	lda #32 ; 6103.5 Hz 
+	lda #16 ; 6103.5 Hz 
 	sta VERA_AUDIO_RATE ; start playback of audio
 
 loop:
