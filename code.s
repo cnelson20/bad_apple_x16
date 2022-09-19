@@ -23,14 +23,14 @@ IMAGE_HEIGHT = 60
 	jmp setup
 
 filename:
-	.literal "OUT2PT/"
+	.byte "out2pt/"
 filename_numbers:
-	.literal "0001.BIN"
+	.byte "0001.bin"
 filename_end:
 audio_filename:
-	.literal "SOUND/"
+	.byte "sound/"
 audio_filename_numbers:
-	.literal "0001.RAW"
+	.byte "0001.raw"
 audio_filename_end:
 
 Default_irq_handler:
