@@ -2,9 +2,22 @@
 
 ; Kernal Routines and VERA registers ;
 
+RAM_BANK = $00
+ROM_BANK = $01
+
 SETLFS = $FFBA 
 SETNAM = $FFBD 
 LOAD = $FFD5
+
+OPEN = $FFC0
+CHKIN = $FFC6
+GETIN = $FFE4
+CLOSE = $FFC3
+
+RDTIM = $FFDE
+
+MACPTR = $FF44
+ACPTR = $FFA5
 
 VERA_LOADDR = $9F20
 VERA_HIADDR = $9F21
@@ -22,15 +35,8 @@ IMAGE_HEIGHT = 60
 .SEGMENT "ONCE"
 	jmp setup
 
-filename:
-	.byte "out2pt/"
-filename_numbers:
-	.byte "0001.bin"
-filename_end:
 audio_filename:
-	.byte "sound/"
-audio_filename_numbers:
-	.byte "0001.raw"
+	.byte "apple.raw"
 audio_filename_end:
 
 Default_irq_handler:
@@ -50,38 +56,20 @@ vram_mapstart:
 	:
 .endmacro
 
-.macro inc_string numbers
-	ldx numbers+3
-	inx 
-	stx numbers+3
-	cpx #$30 + 10 
-	bcc :+
-	
-	ldy #$30
-	sty numbers+3
-	ldx numbers+2
-	inx 
-	stx numbers+2
-	cpx #$30 + 10 
-	bcc :+
+audio_ptr = $30
 
-	sty numbers+2
-	ldx numbers+1
-	inx 
-	stx numbers+1
-	cpx #$30 + 10 
+.macro inc_bank_pointer pointer
+	inc pointer
+	bne :++
+	lda pointer + 1
+	inc A
+	cmp #$C0 
 	bcc :+
-
-	sty numbers+1
-	inc numbers
-
-	ldx numbers
-	cpx #$30 + 7
-	bcc :+ 
-	jsr reset_irq_handler
-	
+	lda #$A0
+	inc RAM_BANK
 	:
-	rts
+	sta pointer + 1
+	:
 .endmacro
 
 setup:
@@ -113,15 +101,16 @@ setup:
 	and #%11011111
 	sta $9F29
 	
+	; modify audio registers ;
 	stz VERA_AUDIO_RATE
 	lda #128
 	sta VERA_AUDIO_CTRL
 	
-	jsr load_new_audio
-	jsr update_audio
 	lda #$0F ; max volume ; 8 bit mono ;
 	sta VERA_AUDIO_CTRL
 	
+	
+	; clear screen ;
 	lda #$00
 	sta VERA_LOADDR
 	lda #0
@@ -148,14 +137,59 @@ setup:
 	jsr preserve_default_irq
 	jsr set_custom_irq_handler
 	
-	lda #16 ; 6103.5 Hz 
-	sta VERA_AUDIO_RATE ; start playback of audio
-
-loop:
+	jsr open_audio_file
+	lda #16
+	sta VERA_AUDIO_RATE
+	jsr update_audio
+	
+	
+	jsr open_video_file
+@changed_loop:
+	jsr load_video_data
+	lda #<video_data_start 
+	sta $20
+	lda #>video_data_start 
+	sta $21
+	
+@draw_frame:
+	jsr frame
+	
+	lda vram_mapstart
+	lsr 
+	sta $9F2E
+	lda vram_mapstart
+	beq :+
+	lda #0
+	sta vram_mapstart
+	jmp :++
+	:
+	lda #$40
+	sta vram_mapstart
 	:
 	
-	bra :-
+	lda need_fill_audio
+	beq :+
+	jsr update_audio
+	:
+	
+	jsr wait_for_vera_interrupt
+	jmp @changed_loop
+
+wait_for_vera_interrupt:
+	stz vera_interrupt_triggered
+	:
+	lda vera_interrupt_triggered
+	beq :-
 	rts
+	
+vera_interrupt_triggered:
+	.byte 0
+need_fill_audio:
+	.byte 0
+
+
+	; lda #16 ; 6103.5 Hz 
+	; sta VERA_AUDIO_RATE ; start playback of audio
 
 frame:	
 	lda #$20
@@ -176,7 +210,6 @@ outer_loop:
 inner_loop:
 	dex
 	beq done 
-	
 	
 	lda current_color
 	sta VERA_DATA 
@@ -206,88 +239,96 @@ end:
 	
 	rts
 
-load_file:
-	lda #filename_end - filename
-	ldx #<filename
-	ldy #>filename
-	jsr SETNAM 
-
-	lda #0
-	ldx #8 
-	ldy #1
-	jsr SETLFS
-
-	lda #0
-	ldx #<video_data_start
-	ldy #>video_data_start
-	jsr LOAD
-	
-	rts 
-
-load_new_audio:
+open_audio_file:
 	lda #audio_filename_end - audio_filename
 	ldx #<audio_filename
 	ldy #>audio_filename
 	jsr SETNAM 
-
+	
+	lda #0 
+	ldx #8
+	ldy #2
+	jsr SETLFS
+	
 	lda #0
+	ldx #<$A000
+	ldy #>$A000
+	jsr LOAD
+	
+	; setup audio ptr to read from ;
+	ldx #<$A000
+	stx audio_ptr
+	ldy #>$A000
+	sty audio_ptr + 1
+	stp
+	lda #1
+	sta RAM_BANK
+	
+	rts
+
+open_video_file:
+	lda #video_combined_filename_end - video_combined_filename
+	ldx #<video_combined_filename
+	ldy #>video_combined_filename
+	jsr SETNAM 
+
+	lda #12
 	ldx #8 
-	ldy #1
+	ldy #12
 	jsr SETLFS
 
-	lda #0
-	ldx #<audio_data_start
-	stx $30
-	ldy #>audio_data_start
-	sty $31
-	jsr LOAD
-
-	inc_string audio_filename_numbers
+	jsr OPEN
 	
-	lda filename_numbers+1
-	cmp #1
-	bcc :+
-	lda filename_numbers+2
-	cmp #6
-	bcc :+
-	lda filename_numbers+3
-	cmp #4
-	bcc :+
-	
-	lda #0
-	sta VERA_AUDIO_RATE
-	
-	:	
 	rts 
-	
-update_audio:
-	;rts ; testing 
 
-	ldy #0
-@write:
+video_combined_filename:
+	.byte "apple.vid"
+video_combined_filename_end:
+
+FRAME_DATASIZE = 442
+
+load_video_data:
+	ldx #12
+	jsr CHKIN 
+	
+	jsr ACPTR
+	sta @byte_load_first
+	sta $02
+	
+	jsr ACPTR 
+	sta @byte_load_second
+	sta $04
+	
+	ldx #<video_data_start
+	ldy #>video_data_start
+	lda @byte_load_first
+	jsr MACPTR
+	lda @byte_load_second
+	beq :+ ; if 0 don't load
+	ldx #<(video_data_start + 255)
+	ldy #>(video_data_start + 255)
+	jsr MACPTR
+	:
+	
+	rts
+@byte_load_first:
+	.byte 0
+@byte_load_second:
+	.byte 0
+
+
+update_audio:
 	lda VERA_AUDIO_CTRL
 	and #128
-	bne :+
-	lda ($30), Y
+	bne @end_update_audio
+	lda (audio_ptr), Y
 	sta VERA_AUDIO_DATA
 	
-	inc $30
-	bne @write
-	lda $31
-	inc A 
-	sta $31	
-	cmp #>audio_data_start + $20
-	bcc @write
+	inc_bank_pointer audio_ptr
+	jmp update_audio
 	
-	jsr load_new_audio
-	lda VERA_AUDIO_RATE
-	bne @write ; if not out, keep copying
-@end_write:
-	rts 
-
-inc_framenumberstring:
-	inc_string filename_numbers
-	rts 
+@end_update_audio:
+	rts
 
 preserve_default_irq:
     lda $0314
@@ -327,29 +368,10 @@ custom_irq_handler:
     and #%00000001
 	bne @dec9F27
 	; only draw every other frame ;
-
-	jsr load_file
-	lda #<video_data_start 
-	sta $20
-	lda #>video_data_start 
-	sta $21
-	jsr inc_framenumberstring
-	
-@draw_frame:	
-	jsr frame
-	
-	lda vram_mapstart
-	lsr 
-	sta $9F2E
-	lda vram_mapstart
-	beq :+
-	lda #0
-	sta vram_mapstart
-	jmp :++
-	:
-	lda #$40
-	sta vram_mapstart
-	:
+		
+@draw_frame:
+	lda #1
+	sta vera_interrupt_triggered
 @dec9F27:
 	lda $9F27 
 	ora #1
@@ -362,10 +384,15 @@ custom_irq_handler:
 	beq @fifo_done
 	
 	; fill fifo 
-	jsr update_audio
+	lda #1
+	sta need_fill_audio
 	
 @fifo_done:
     jmp (Default_irq_handler)
+
+
+
+	
 
 video_data_start = $1000
 audio_data_start = $2000

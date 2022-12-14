@@ -1,5 +1,11 @@
-all: APPLE.PRG
-	 /mnt/d/x16emu-r41/x16emu.exe -prg APPLE.PRG -run;
+all: APPLE.PRG sound
+	 
 
 APPLE.PRG: code.s
-	cl65 code.s -o APPLE.PRG -t cx16;
+	cl65.exe code.s -o APPLE.PRG -t cx16;
+
+sound: APPLE.RAW
+	cp Bad_Apple.raw APPLE.RAW
+
+run: APPLE.PRG sound
+	/mnt/d/box16/box16.exe -prg APPLE.PRG -run;

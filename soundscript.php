@@ -1,3 +1,5 @@
+#!/usr/bin/env php
+
 <?php 
 
 $part_length = 0x4000 - 0x2000;
