@@ -56,7 +56,7 @@ vram_mapstart:
 	:
 .endmacro
 
-audio_ptr = $30
+audio_ptr = $18
 
 .macro inc_bank_pointer pointer
 	inc pointer
@@ -73,6 +73,8 @@ audio_ptr = $30
 .endmacro
 
 setup:
+	jsr open_audio_file
+	
 	lda #$40
 	sta vram_mapstart
 	
@@ -134,15 +136,13 @@ setup:
 	dey 
 	bne :--
 
-	jsr preserve_default_irq
-	jsr set_custom_irq_handler
-	
-	jsr open_audio_file
 	lda #16
 	sta VERA_AUDIO_RATE
 	jsr update_audio
 	
-	
+	jsr preserve_default_irq
+	jsr set_custom_irq_handler
+		
 	jsr open_video_file
 @changed_loop:
 	jsr load_video_data
@@ -260,7 +260,7 @@ open_audio_file:
 	stx audio_ptr
 	ldy #>$A000
 	sty audio_ptr + 1
-	stp
+	;stp
 	lda #1
 	sta RAM_BANK
 	
